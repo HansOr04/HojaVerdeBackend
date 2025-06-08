@@ -1,0 +1,142 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Area {
+  id                   String    @id @default(uuid())
+  name                 String    @unique @db.VarChar(100)
+  defaultEntryTime     DateTime  @default(dbgenerated("'06:30:00'::time")) @db.Time
+  defaultExitTime      DateTime  @default(dbgenerated("'16:00:00'::time")) @db.Time
+  defaultLunchDuration Int       @default(30)
+  defaultWorkingHours  Int       @default(8)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  
+  employees Employee[]
+
+  @@map("areas")
+}
+
+model Employee {
+  id             String   @id @default(uuid())
+  identification String   @unique @db.VarChar(20)
+  firstName      String   @db.VarChar(100)
+  lastName       String   @db.VarChar(100)
+  areaId         String?
+  position       String?  @db.VarChar(100)
+  baseSalary     Decimal? @db.Decimal(10, 2)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  area               Area?               @relation(fields: [areaId], references: [id])
+  user               User?
+  attendanceRecords  AttendanceRecord[]
+  monthlySummaries   MonthlySummary[]
+
+  @@map("employees")
+}
+
+model User {
+  id         String   @id @default(uuid())
+  employeeId String   @unique
+  email      String   @unique @db.VarChar(255)
+  password   String
+  role       Role     @default(VIEWER)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@map("users")
+}
+
+model AttendanceRecord {
+  id               String    @id @default(uuid())
+  employeeId       String
+  date             DateTime  @db.Date
+  entryTime        DateTime? @db.Time
+  exitTime         DateTime? @db.Time
+  lunchDuration    Int?
+  workedHours      Decimal?  @db.Decimal(4, 2)
+  isVacation       Boolean   @default(false)
+  permissionHours  Decimal?  @default(0) @db.Decimal(4, 2)
+  permissionReason String?   @db.Text
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  
+  employee      Employee       @relation(fields: [employeeId], references: [id])
+  foodAllowance FoodAllowance?
+  extraHours    ExtraHours?
+  
+  @@unique([employeeId, date])
+  @@map("attendance_records")
+}
+
+model FoodAllowance {
+  id                   String   @id @default(uuid())
+  attendanceId         String   @unique
+  breakfast            Int      @default(0)
+  reinforcedBreakfast  Int      @default(0)
+  snack1               Int      @default(0)
+  afternoonSnack       Int      @default(0)
+  dryMeal              Int      @default(0)
+  lunch                Int      @default(0)
+  transport            Decimal  @default(0) @db.Decimal(6, 2)
+  createdAt            DateTime @default(now())
+  
+  attendance AttendanceRecord @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+
+  @@map("food_allowances")
+}
+
+model ExtraHours {
+  id                   String   @id @default(uuid())
+  attendanceId         String   @unique
+  nightHours           Decimal  @default(0) @db.Decimal(4, 2)
+  supplementaryHours   Decimal  @default(0) @db.Decimal(4, 2)
+  extraordinaryHours   Decimal  @default(0) @db.Decimal(4, 2)
+  createdAt            DateTime @default(now())
+  
+  attendance AttendanceRecord @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+
+  @@map("extra_hours")
+}
+
+model MonthlySummary {
+  id                        String   @id @default(uuid())
+  employeeId                String
+  periodStart               DateTime @db.Date
+  periodEnd                 DateTime @db.Date
+  totalWorkedHours          Decimal? @db.Decimal(6, 2)
+  totalNightHours           Decimal? @db.Decimal(6, 2)
+  totalSupplementaryHours   Decimal? @db.Decimal(6, 2)
+  totalExtraordinaryHours   Decimal? @db.Decimal(6, 2)
+  totalBreakfast            Int?
+  totalReinforcedBreakfast  Int?
+  totalSnack1               Int?
+  totalAfternoonSnack       Int?
+  totalDryMeal              Int?
+  totalLunch                Int?
+  totalTransport            Decimal? @db.Decimal(8, 2)
+  totalPermissions          Decimal? @db.Decimal(6, 2)
+  vacationDays              Int?
+  createdAt                 DateTime @default(now())
+  
+  employee Employee @relation(fields: [employeeId], references: [id])
+  
+  @@unique([employeeId, periodStart, periodEnd])
+  @@map("monthly_summaries")
+}
+
+enum Role {
+  ADMIN
+  EDITOR
+  VIEWER
+}
