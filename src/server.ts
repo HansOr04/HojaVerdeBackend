@@ -33,10 +33,41 @@ const limiter = rateLimit({
 
 // Middlewares de seguridad
 app.use(helmet());
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true
-}));
+
+// CORS configurado para desarrollo y producción
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'https://hojaverdef1.netlify.app',
+  'https://hojaverdef1.netlify.app/',
+  process.env.FRONTEND_URL
+].filter(Boolean);
+
+console.log('🌐 CORS configurado para:', allowedOrigins);
+
+const corsOptions = {
+  origin: function (origin: string | undefined, callback: any) {
+    // Permitir requests sin origin (apps móviles, Postman, etc.) solo en desarrollo
+    if (!origin && process.env.NODE_ENV === 'development') {
+      return callback(null, true);
+    }
+
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.log('🚫 CORS blocked origin:', origin);
+      console.log('✅ Allowed origins:', allowedOrigins);
+      callback(new Error('No permitido por CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
+
 app.use(compression());
 app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' })); // Aumentado para soportar bulk inserts
@@ -54,7 +85,8 @@ app.get('/health', async (req, res) => {
       timestamp: new Date().toISOString(),
       environment: process.env.NODE_ENV || 'development',
       database: 'Connected',
-      server: 'Running'
+      server: 'Running',
+      cors: allowedOrigins
     });
   } catch (error) {
     console.error('Database connection error:', error);
@@ -75,6 +107,10 @@ app.get('/api', (req, res) => {
     message: 'API HojaVerde funcionando correctamente',
     version: '1.0.0',
     timestamp: new Date().toISOString(),
+    cors: {
+      allowedOrigins: allowedOrigins,
+      currentOrigin: req.headers.origin
+    },
     endpoints: {
       health: '/health',
       auth: '/api/auth',
@@ -149,6 +185,7 @@ app.use((req, res) => {
     message: 'Ruta no encontrada',
     path: req.originalUrl,
     method: req.method,
+    origin: req.headers.origin,
     timestamp: new Date().toISOString(),
     availableRoutes: {
       health: 'GET /health',
@@ -189,7 +226,7 @@ const server = app.listen(PORT, () => {
 📍 URL Base: http://localhost:${PORT}
 🌍 Ambiente: ${process.env.NODE_ENV || 'development'}
 📊 Base de datos: PostgreSQL + Supabase ✅
-🔒 CORS habilitado para: ${process.env.FRONTEND_URL || 'http://localhost:3000'}
+🔒 CORS habilitado para: ${allowedOrigins.join(', ')}
 📝 Rate Limit: 100 req/15min por IP
 💾 JSON Limit: 10MB (para bulk inserts)
 
@@ -260,6 +297,10 @@ curl -X GET "http://localhost:${PORT}/api/attendance/verify?date=2025-01-06" \\
 🎉 SISTEMA COMPLETO - María puede registrar 615 empleados!
 🚀 Rendimiento esperado: ~5-10 segundos para 615 registros
 💪 Características: Transacciones atómicas, cálculos automáticos, prevención de duplicados
+
+🌐 CORS DEBUG INFO:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Allowed Origins: ${allowedOrigins.join(', ')}
   `);
 });
 
